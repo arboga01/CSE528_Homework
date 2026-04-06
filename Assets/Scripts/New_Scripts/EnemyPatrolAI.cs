@@ -9,15 +9,13 @@ public class EnemyPatrolAI : MonoBehaviour
 
     [Header("Health & UI")]
     public Slider healthBar;
-    private float maxhealth;
+    private float maxhealth = 100f;
     private float currentHealth;
 
     [Header("Movement Settings")]
-    public Transform[] waypoints;
     public float moveSpeed = 3f;
     public float wallDetectionRange = 2f;
     public LayerMask obstacleLayer;
-    private int currentWaypointIndex = 0;
 
 
     [Header("Detection Settings (Should be set by Difficulty")]
@@ -83,11 +81,18 @@ public class EnemyPatrolAI : MonoBehaviour
     {
         if (player == null || currentHealth <= 0) return;
         float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-        currentState = (distanceToPlayer <= detectionRange) ? State.Chasing : State.Patrolling;
-
+        
+        if (distanceToPlayer <= detectionRange)
+        {
+            currentState = State.Chasing;
+        }
+        else
+        {
+            currentState = State.Patrolling;
+        }
         if (currentState == State.Patrolling)
         {
-            RoamingPatrol();
+            ContinuousPatrol();
         }
         else
         {
@@ -99,22 +104,20 @@ public class EnemyPatrolAI : MonoBehaviour
         }
 
     }
-    void RoamingPatrol()
+    void ContinuousPatrol()
     {
-        Ray ray = new Ray(transform.position + Vector3.up, transform.forward);
-        RaycastHit hit;
+        transform.Translate(Vector3.forward * moveSpeed * Time.deltaTime);
 
+        Ray ray = new Ray(transform.position + Vector3.up, transform.forward);
         Debug.DrawRay(ray.origin, ray.direction * wallDetectionRange, Color.red);
-        if (Physics.Raycast(ray, out hit, wallDetectionRange, obstacleLayer))
+
+        if (Physics.Raycast(ray, wallDetectionRange, obstacleLayer))
         {
-            float randomTurn = Random.Range(100f, 260f);
+            float randomTurn = Random.Range(100f, 200f);
             transform.Rotate(0, randomTurn, 0);
         }
-        else
-        {
-            Patrol();
-        }
     }
+   
     float CalculateCurrentAccuracy()
     {
         float accuracy = baseAccuracy;
@@ -163,17 +166,7 @@ public class EnemyPatrolAI : MonoBehaviour
     {
         Destroy(gameObject);
     }
-    void Patrol()
-    {
-        if (waypoints.Length == 0) return;
-        Transform target = waypoints[currentWaypointIndex];
-        transform.position = Vector3.MoveTowards(transform.position, target.position, moveSpeed * Time.deltaTime);
-        Vector3 direction = (target.position - transform.position).normalized;
-        if (direction != Vector3.zero)
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), Time.deltaTime * 5f);
-        if (Vector3.Distance(transform.position, target.position) < 0.2f)
-            currentWaypointIndex = (currentWaypointIndex + 1) % waypoints.Length;
-    }
+    
     void AttackandChase() { 
         Vector3 targetPos = new Vector3(player.position.x, transform.position.y, player.position.z);
 

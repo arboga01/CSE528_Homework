@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement; // 1. CRITICAL: Add this line at the top
 
 public class PlayerHealth : MonoBehaviour
 {
@@ -28,7 +29,13 @@ public class PlayerHealth : MonoBehaviour
 
     void Die()
     {
-        Debug.Log("Player Died");
-        Destroy(gameObject);
+        Debug.Log("Player Died. Restarting Level...");
+
+        // 2. Get the name of the current level and reload it
+        string currentSceneName = SceneManager.GetActiveScene().name;
+        SceneManager.LoadScene(currentSceneName);
+
+        // Note: We don't necessarily need Destroy(gameObject) here 
+        // because loading a scene clears out everything automatically.
     }
 }

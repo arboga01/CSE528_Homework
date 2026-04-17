@@ -22,6 +22,7 @@ public class EnemyPatrolAI : MonoBehaviour
     public GameObject bulletPrefab;
     public Transform firePoint;
     public float stoppingDistance = 5f;
+    public float bulletSpeed = 50f; // Added this variable to fix the error
 
     private float fireRate = 1f;
     private float baseAccuracy = 1f;
@@ -44,7 +45,13 @@ public class EnemyPatrolAI : MonoBehaviour
         if (dist <= detectionRange) AttackandChase();
         else ContinuousPatrol();
 
-        if (anim != null) anim.SetBool("isWalking", true);
+        // Animation logic
+        if (anim != null)
+        {
+            anim.SetBool("isWalking", dist > stoppingDistance || dist > detectionRange);
+            // If they are in detection range, they should probably be in an "Aim" state
+            anim.SetBool("isAiming", dist <= detectionRange);
+        }
     }
 
     void ContinuousPatrol()
@@ -75,12 +82,42 @@ public class EnemyPatrolAI : MonoBehaviour
 
     void shoot()
     {
-        GameObject b = Instantiate(bulletPrefab, firePoint.position, firePoint.rotation);
-        Bullet script = b.GetComponent<Bullet>();
-        if (script != null) script.Setup("Player", 10f);
+        if (firePoint == null || bulletPrefab == null || player == null) return;
 
-        Rigidbody rb = b.GetComponent<Rigidbody>();
-        if (rb != null) rb.linearVelocity = firePoint.forward * 50f;
+        // Calculate direction toward player chest (Vector3.up * 1.5f roughly)
+        Vector3 targetDirection = (player.position + Vector3.up * 1.5f) - firePoint.position;
+        Quaternion lookRotation = Quaternion.LookRotation(targetDirection);
+
+        float accuracy = CalculateCurrentAccuracy();
+        float currentSpread = (1f - accuracy) * 10f;
+        Quaternion spreadRotation = Quaternion.Euler(
+            Random.Range(-currentSpread, currentSpread),
+            Random.Range(-currentSpread, currentSpread),
+            0f
+        );
+
+        GameObject bulletObj = Instantiate(bulletPrefab, firePoint.position, lookRotation * spreadRotation);
+
+        Bullet bulletScript = bulletObj.GetComponent<Bullet>();
+        if (bulletScript != null)
+        {
+            bulletScript.Setup("Player", 10f);
+        }
+
+        Rigidbody bulletRb = bulletObj.GetComponent<Rigidbody>();
+        if (bulletRb != null)
+        {
+            bulletRb.linearVelocity = bulletObj.transform.forward * bulletSpeed;
+        }
+    }
+
+    // Added this method to fix the missing method error
+    float CalculateCurrentAccuracy()
+    {
+        float healthPercent = currentHealth / maxHealth;
+        if (healthPercent < 0.25f) return baseAccuracy * 0.3f;
+        if (healthPercent < 0.5f) return baseAccuracy * 0.6f;
+        return baseAccuracy;
     }
 
     public void TakeDamage(float amount)

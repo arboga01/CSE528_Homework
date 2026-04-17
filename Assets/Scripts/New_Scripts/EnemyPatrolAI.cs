@@ -4,183 +4,94 @@ using UnityEngine.UI;
 public class EnemyPatrolAI : MonoBehaviour
 {
     public enum Difficulty { Easy, Medium, Hard }
-    [Header("Difficulty Settings")]
     public Difficulty difficulty = Difficulty.Medium;
 
     [Header("Health & UI")]
     public Slider healthBar;
-    private float maxhealth = 100f;
-    private float currentHealth;
+    public float maxHealth = 100f;
+    public float currentHealth;
 
-    [Header("Movement Settings")]
+    [Header("Movement")]
     public float moveSpeed = 3f;
     public float wallDetectionRange = 2f;
     public LayerMask obstacleLayer;
 
-
-    [Header("Detection Settings (Should be set by Difficulty")]
+    [Header("Attack")]
     public Transform player;
-    public float detectionRange;
-    public LayerMask playerLayer;
-
-    [Header("Attack Settings (should be set by Difficulty)")]
+    public float detectionRange = 10f;
     public GameObject bulletPrefab;
     public Transform firePoint;
-    private float fireRate;
-    private const float CONSTANT_BULLET_SPEED = 100f;
+    public float stoppingDistance = 5f;
+
+    private float fireRate = 1f;
+    private float baseAccuracy = 1f;
     private float nextFireTime;
-    private float baseAccuracy;
-
-    [Header("Animation")]
     private Animator anim;
-
-    private enum State { Patrolling, Chasing, Attacking }
-    private State currentState = State.Patrolling;
 
     void Awake()
     {
         anim = GetComponent<Animator>();
-        ApplyDifficultySettings();
-        currentHealth = maxhealth;
-
-        Canvas canvas = GetComponentInChildren<Canvas>();
-        if (canvas != null && canvas.renderMode == RenderMode.WorldSpace)
-        {
-            canvas.worldCamera = Camera.main;
-        }
+        currentHealth = maxHealth;
         UpdateUI();
-
-    }
-
-    void ApplyDifficultySettings()
-    {
-        switch (difficulty)
-        {
-            case Difficulty.Easy:
-                maxhealth = 50f;
-                detectionRange = 5f;
-                fireRate = 1.0f;
-                baseAccuracy = 0.5f;
-                break;
-            case Difficulty.Medium:
-                maxhealth = 100f;
-                detectionRange = 10f;
-                fireRate = 1.0f;
-                baseAccuracy = 0.7f;
-                break;
-            case Difficulty.Hard:
-                maxhealth = 150f;
-                detectionRange = 15f;
-                fireRate = 1.5f;
-                baseAccuracy = 0.8f;
-                break;
-        }
     }
 
     void Update()
     {
         if (player == null || currentHealth <= 0) return;
-        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
-        
-        if (distanceToPlayer <= detectionRange)
-        {
-            currentState = State.Chasing;
-        }
-        else
-        {
-            currentState = State.Patrolling;
-        }
-        if (currentState == State.Patrolling)
-        {
-            ContinuousPatrol();
-        }
-        else
-        {
-            AttackandChase();
-        }
-        if (anim != null)
-        {
-            anim.SetBool("isWalking", true);
-        }
 
+        float dist = Vector3.Distance(transform.position, player.position);
+
+        if (dist <= detectionRange) AttackandChase();
+        else ContinuousPatrol();
+
+        if (anim != null) anim.SetBool("isWalking", true);
     }
+
     void ContinuousPatrol()
     {
         transform.Translate(Vector3.forward * moveSpeed * Time.deltaTime);
-
-        Ray ray = new Ray(transform.position + Vector3.up, transform.forward);
-        Debug.DrawRay(ray.origin, ray.direction * wallDetectionRange, Color.red);
-
-        if (Physics.Raycast(ray, wallDetectionRange, obstacleLayer))
+        if (Physics.Raycast(transform.position + Vector3.up, transform.forward, wallDetectionRange, obstacleLayer))
         {
-            float randomTurn = Random.Range(100f, 200f);
-            transform.Rotate(0, randomTurn, 0);
+            transform.Rotate(0, Random.Range(100, 200), 0);
         }
     }
-   
-    float CalculateCurrentAccuracy()
+
+    void AttackandChase()
     {
-        float accuracy = baseAccuracy;
-        float healthPercent = currentHealth / maxhealth;
+        float dist = Vector3.Distance(transform.position, player.position);
+        Vector3 targetPos = new Vector3(player.position.x, transform.position.y, player.position.z);
 
-        if (healthPercent < 0.25f)
-            accuracy *= 0.3f; //70% accuracy drop at low health
-        else if (healthPercent < 0.5f)
-            accuracy *= 0.6f; //40% accuracy drop at medium health
-        return accuracy;
+        if (dist > stoppingDistance)
+            transform.position = Vector3.MoveTowards(transform.position, targetPos, moveSpeed * Time.deltaTime);
 
+        transform.LookAt(targetPos);
+
+        if (Time.time >= nextFireTime)
+        {
+            shoot();
+            nextFireTime = Time.time + 1f / fireRate;
+        }
     }
+
     void shoot()
     {
-        float accuracy = CalculateCurrentAccuracy();
+        GameObject b = Instantiate(bulletPrefab, firePoint.position, firePoint.rotation);
+        Bullet script = b.GetComponent<Bullet>();
+        if (script != null) script.Setup("Player", 10f);
 
-        float maxSpread = 20f;
-        float currentSpread = (1f - accuracy) * maxSpread;
-
-        Quaternion spreadRotation = Quaternion.Euler(
-            Random.Range(-currentSpread, currentSpread),
-            Random.Range(-currentSpread, currentSpread),
-            0f
-        );
-
-        GameObject bullet = Instantiate(bulletPrefab, firePoint.position, firePoint.rotation * spreadRotation);
-        Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
-
-        if (bulletRb != null)
-
-            bulletRb.linearVelocity = bullet.transform.forward * CONSTANT_BULLET_SPEED;
+        Rigidbody rb = b.GetComponent<Rigidbody>();
+        if (rb != null) rb.linearVelocity = firePoint.forward * 50f;
     }
+
     public void TakeDamage(float amount)
     {
         currentHealth -= amount;
         UpdateUI();
-        if (currentHealth <= 0) Die();
+        if (currentHealth <= 0) Destroy(gameObject);
     }
 
     void UpdateUI()
     {
-        if (healthBar != null)
-            healthBar.value = currentHealth / maxhealth;
-    }
-    void Die()
-    {
-        Destroy(gameObject);
-    }
-    
-    void AttackandChase() { 
-        Vector3 targetPos = new Vector3(player.position.x, transform.position.y, player.position.z);
-
-        transform.position = Vector3.MoveTowards(transform.position, targetPos, moveSpeed* Time.deltaTime);
-        Vector3 direction = (targetPos - transform.position).normalized;
-        if (direction != Vector3.zero)
-        {
-            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), Time.deltaTime* 5f);
-        }
-
-        if (Time.time >= nextFireTime)
-        {
-        shoot();
-        nextFireTime = Time.time + 1f / fireRate;
-        }
+        if (healthBar != null) healthBar.value = currentHealth / maxHealth;
     }
 }
